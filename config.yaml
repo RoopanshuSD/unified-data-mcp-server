@@ -1,0 +1,26 @@
+# Data sources (paths are relative to this file). Swap kind/dsn for postgres or snowflake.
+sources:
+  shop: {kind: sqlite, path: data/shop.db}
+  hr:   {kind: sqlite, path: data/hr.db}
+  # warehouse: {kind: postgres, dsn: "postgresql://readonly:...@localhost:5432/shop"}
+  # analytics: {kind: snowflake, params: {account: ..., user: ..., authenticator: externalbrowser, role: READ_ONLY}}
+
+services:
+  catalog:
+    openapi: specs/catalog.json
+    base_url: http://localhost:9000
+    allowed_operations: [listProducts, getProduct]   # createProduct exists in the spec but is not allowed
+    allowed_methods: [get]
+
+roles:
+  viewer:     {sources: [shop],     services: [],        tools: [search_tables, describe_table]}
+  analyst:    {sources: [shop],     services: [catalog], tools: [search_tables, describe_table, run_readonly_query, list_api_operations, call_api_endpoint]}
+  hr_analyst: {sources: [shop, hr], services: [],        tools: [search_tables, describe_table, run_readonly_query]}
+
+limits:
+  row_cap: 1000
+  statement_timeout_s: 10
+  burst: 20          # token bucket capacity per (user, tool)
+  per_second: 2      # refill rate
+
+audit_log: audit.jsonl

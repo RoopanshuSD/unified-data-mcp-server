@@ -1,0 +1,6 @@
+# Optional Postgres for the integration test (tests/integration/test_postgres.py).
+services:
+  postgres:
+    image: postgres:16
+    environment: {POSTGRES_USER: readonly, POSTGRES_PASSWORD: readonly, POSTGRES_DB: shop}
+    ports: ["5432:5432"]

@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Catalog API", "version": "1.0.0"},
+  "paths": {
+    "/products": {
+      "get": {"operationId": "listProducts", "summary": "List products",
+              "parameters": [{"name": "category", "in": "query"}, {"name": "limit", "in": "query"}]},
+      "post": {"operationId": "createProduct", "summary": "Create a product"}
+    },
+    "/products/{id}": {
+      "get": {"operationId": "getProduct", "summary": "Get one product",
+              "parameters": [{"name": "id", "in": "path", "required": true}]},
+      "delete": {"operationId": "deleteProduct", "summary": "Delete a product"}
+    }
+  }
+}
