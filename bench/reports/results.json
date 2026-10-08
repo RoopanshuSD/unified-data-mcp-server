@@ -1,0 +1,38 @@
+{
+ "redteam": {
+  "attacks": 48,
+  "blocked": 48,
+  "benign": 18,
+  "false_positives": 0,
+  "categories": {
+   "ddl": 7,
+   "dml": 5,
+   "privilege": 2,
+   "session": 5,
+   "stacked": 4,
+   "evasion": 7,
+   "cte_dml": 2,
+   "select_into": 1,
+   "exfil": 7,
+   "dos": 3,
+   "locking": 2,
+   "maintenance": 1,
+   "catalog": 2
+  }
+ },
+ "latency": {
+  "calls": 2000,
+  "p50_ms": 1.43,
+  "p95_ms": 2.51,
+  "guard_only_p50_ms": 0.453,
+  "backend": "SQLite (in-process)"
+ },
+ "context_cost": {
+  "tables": 14,
+  "this_server_tools": 5,
+  "this_server_tokens": 784,
+  "naive_tools": 14,
+  "naive_tokens": 1368,
+  "tokenizer": "cl100k_base"
+ }
+}
